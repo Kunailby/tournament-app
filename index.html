@@ -455,10 +455,70 @@
             background: rgba(0, 212, 255, 0.4);
             transform: scale(1.05);
         }
+
+        .restart-btn {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: linear-gradient(90deg, #e74c3c, #c0392b) !important;
+            z-index: 1000;
+            display: none;
+        }
+
+        .restart-btn:hover {
+            box-shadow: 0 5px 20px rgba(231, 76, 60, 0.4) !important;
+        }
+
+        .confirm-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 15px 0;
+            cursor: pointer;
+        }
+
+        .confirm-checkbox input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .confirm-checkbox label {
+            color: #fff;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .btn-danger {
+            background: linear-gradient(90deg, #e74c3c, #c0392b) !important;
+        }
+
+        .btn-danger:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+        }
     </style>
 </head>
 <body>
     <button class="add-player-btn" id="add-late-player-btn" onclick="showAddPlayerModal()">+ Add Late Player</button>
+    <button class="restart-btn" id="restart-btn" onclick="showRestartModal()">Restart Tournament</button>
+
+    <div class="modal-overlay" id="restart-modal" onkeypress="if(event.key==='Enter')confirmRestart()">
+        <div class="modal">
+            <h3>⚠️ Restart Tournament?</h3>
+            <p style="color: rgba(255,255,255,0.7); margin-bottom: 10px;">This will erase all progress and cannot be undone!</p>
+            <div class="confirm-checkbox">
+                <input type="checkbox" id="confirm-restart-checkbox" onchange="updateRestartButton()">
+                <label for="confirm-restart-checkbox">Yes, I want to restart the tournament</label>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn-cancel" onclick="hideRestartModal()">Cancel</button>
+                <button class="btn-danger" id="confirm-restart-btn" onclick="confirmRestart()" disabled>Restart</button>
+            </div>
+        </div>
+    </div>
 
     <div class="modal-overlay" id="add-player-modal">
         <div class="modal">
@@ -971,6 +1031,35 @@
         function updateAddPlayerButton() {
             const btn = document.getElementById('add-late-player-btn');
             btn.style.display = (currentRound > 0 && !tournamentFinished) ? 'block' : 'none';
+            
+            const restartBtn = document.getElementById('restart-btn');
+            restartBtn.style.display = (currentRound > 0 && !tournamentFinished) ? 'block' : 'none';
+        }
+
+        // Restart modal functions
+        function showRestartModal() {
+            document.getElementById('restart-modal').classList.add('active');
+            document.getElementById('confirm-restart-checkbox').checked = false;
+            updateRestartButton();
+        }
+
+        function hideRestartModal() {
+            document.getElementById('restart-modal').classList.remove('active');
+            document.getElementById('confirm-restart-checkbox').checked = false;
+        }
+
+        function updateRestartButton() {
+            const checkbox = document.getElementById('confirm-restart-checkbox');
+            const btn = document.getElementById('confirm-restart-btn');
+            btn.disabled = !checkbox.checked;
+        }
+
+        function confirmRestart() {
+            const checkbox = document.getElementById('confirm-restart-checkbox');
+            if (checkbox.checked) {
+                hideRestartModal();
+                resetTournament();
+            }
         }
 
         function submitRoundResults() {
