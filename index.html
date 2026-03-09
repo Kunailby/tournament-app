@@ -582,6 +582,12 @@
                     currentRound = state.currentRound || 0;
                     matches = state.matches || [];
                     matchHistory = state.matchHistory || {};
+                    // Ensure all players have matchHistory entries
+                    players.forEach(p => {
+                        if (!matchHistory[p.name]) {
+                            matchHistory[p.name] = [];
+                        }
+                    });
                     tournamentFinished = state.tournamentFinished || false;
                     restoreUI();
                 } catch (e) {
@@ -723,11 +729,22 @@
 
         function generateMatches() {
             const sorted = [...players].sort((a, b) => {
-                if (b.matchPoints !== a.matchPoints) return b.matchPoints - a.matchPoints;
-                return b.victoryPoints - a.victoryPoints;
+                const aMP = a.matchPoints || 0;
+                const bMP = b.matchPoints || 0;
+                const aVP = a.victoryPoints || 0;
+                const bVP = b.victoryPoints || 0;
+                if (bMP !== aMP) return bMP - aMP;
+                return bVP - aVP;
             });
             matches = [];
             const paired = new Set();
+
+            // Ensure all players have matchHistory entries
+            sorted.forEach(p => {
+                if (!matchHistory[p.name]) {
+                    matchHistory[p.name] = [];
+                }
+            });
 
             for (let i = 0; i < sorted.length; i++) {
                 if (paired.has(sorted[i].name)) continue;
@@ -925,16 +942,26 @@
                     matches[byeMatchIndex].winner = null;
                     matches[byeMatchIndex].isBye = false;
                     renderMatches();
-                }
-                
-                updateStandings();
-                saveState();
-                hideAddPlayerModal();
-                
-                if (byeMatchIndex !== -1) {
+                    updateStandings();
+                    saveState();
+                    hideAddPlayerModal();
                     alert(name + ' has been added and paired with ' + matches[byeMatchIndex].player1 + '!');
                 } else {
-                    alert(name + ' has been added to the tournament! They will be paired in the next round.');
+                    // No BYE match to replace - create a new BYE match for the late player
+                    matches.push({
+                        player1: name,
+                        player2: 'VOID',
+                        vp1: 0,
+                        vp2: 0,
+                        winner: 1, // Auto-win for player1
+                        completed: false,
+                        isBye: true
+                    });
+                    renderMatches();
+                    updateStandings();
+                    saveState();
+                    hideAddPlayerModal();
+                    alert(name + ' has been added with a BYE this round (they will receive 3 Match Points automatically).');
                 }
             } else if (players.find(p => p.name.toLowerCase() === name.toLowerCase())) {
                 alert('Player already exists!');
