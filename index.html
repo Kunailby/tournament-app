@@ -354,9 +354,112 @@
             font-size: 0.9rem;
             margin-top: 10px;
         }
+
+        .add-player-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: linear-gradient(90deg, #27ae60, #2ecc71);
+            border: none;
+            border-radius: 25px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 0.9rem;
+            z-index: 100;
+            display: none;
+        }
+
+        .add-player-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(39, 174, 96, 0.4);
+        }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .modal h3 {
+            color: #00d4ff;
+            margin-bottom: 20px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .modal-buttons button {
+            flex: 1;
+        }
+
+        .btn-cancel {
+            background: rgba(255, 255, 255, 0.2) !important;
+        }
+
+        .match-player .name {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            cursor: grab;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+
+        .match-player .name:hover {
+            background: rgba(0, 212, 255, 0.2);
+        }
+
+        .match-player .name.dragging {
+            opacity: 0.5;
+            cursor: grabbing;
+        }
+
+        .match-player .name.drag-over {
+            background: rgba(0, 212, 255, 0.4);
+            transform: scale(1.05);
+        }
     </style>
 </head>
 <body>
+    <button class="add-player-btn" id="add-late-player-btn" onclick="showAddPlayerModal()">+ Add Late Player</button>
+
+    <div class="modal-overlay" id="add-player-modal">
+        <div class="modal">
+            <h3>Add Late Player</h3>
+            <input type="text" id="late-player-name" placeholder="Enter player name" onkeypress="if(event.key==='Enter')addLatePlayer()">
+            <p class="info-text">Late players start with 0 MP and 0 VP</p>
+            <div class="modal-buttons">
+                <button class="btn-cancel" onclick="hideAddPlayerModal()">Cancel</button>
+                <button onclick="addLatePlayer()">Add Player</button>
+            </div>
+        </div>
+    </div>
+
     <div class="container">
         <h1>Tournament Manager</h1>
 
@@ -374,6 +477,7 @@
             </div>
             <div class="player-list" id="player-list"></div>
             <p class="info-text">Add at least 4 players to start the tournament (even number required)</p>
+            <p class="info-text">Scoring: Win = 3 MP, Draw = 1 MP each</p>
             <div class="action-buttons">
                 <button onclick="startTournament()" id="start-btn" disabled>Start Tournament</button>
             </div>
@@ -394,7 +498,7 @@
                     <tr>
                         <th>Rank</th>
                         <th>Player</th>
-                        <th>Matches Won</th>
+                        <th>Match Points</th>
                         <th>Victory Points</th>
                     </tr>
                 </thead>
@@ -484,20 +588,20 @@
                 }
                 
                 const sorted = [...players].sort((a, b) => {
-                    if (b.matchesWon !== a.matchesWon) return b.matchesWon - a.matchesWon;
+                    if (b.matchPoints !== a.matchPoints) return b.matchPoints - a.matchPoints;
                     return b.victoryPoints - a.victoryPoints;
                 });
                 if (sorted[0]) {
                     document.getElementById('first-place').textContent = sorted[0].name;
-                    document.getElementById('first-points').textContent = sorted[0].matchesWon + ' wins, ' + sorted[0].victoryPoints + ' VP';
+                    document.getElementById('first-points').textContent = sorted[0].matchPoints + ' MP, ' + sorted[0].victoryPoints + ' VP';
                 }
                 if (sorted[1]) {
                     document.getElementById('second-place').textContent = sorted[1].name;
-                    document.getElementById('second-points').textContent = sorted[1].matchesWon + ' wins, ' + sorted[1].victoryPoints + ' VP';
+                    document.getElementById('second-points').textContent = sorted[1].matchPoints + ' MP, ' + sorted[1].victoryPoints + ' VP';
                 }
                 if (sorted[2]) {
                     document.getElementById('third-place').textContent = sorted[2].name;
-                    document.getElementById('third-points').textContent = sorted[2].matchesWon + ' wins, ' + sorted[2].victoryPoints + ' VP';
+                    document.getElementById('third-points').textContent = sorted[2].matchPoints + ' MP, ' + sorted[2].victoryPoints + ' VP';
                 }
             } else if (currentRound > 0) {
                 // Tournament in progress
@@ -510,6 +614,7 @@
                 updatePlayerList();
                 checkStartButton();
             }
+            updateAddPlayerButton();
         }
 
         function addPlayer() {
@@ -519,7 +624,7 @@
             if (name && !players.find(p => p.name.toLowerCase() === name.toLowerCase())) {
                 players.push({
                     name: name,
-                    matchesWon: 0,
+                    matchPoints: 0,
                     victoryPoints: 0
                 });
                 matchHistory[name] = [];
@@ -563,12 +668,12 @@
             }
 
             const sorted = [...players].sort((a, b) => {
-                if (b.matchesWon !== a.matchesWon) return b.matchesWon - a.matchesWon;
+                if (b.matchPoints !== a.matchPoints) return b.matchPoints - a.matchPoints;
                 return b.victoryPoints - a.victoryPoints;
             });
             
             tbody.innerHTML = sorted.map((p, i) => 
-                '<tr><td>' + (i + 1) + '</td><td>' + p.name + '</td><td>' + p.matchesWon + '</td><td>' + p.victoryPoints + '</td></tr>'
+                '<tr><td>' + (i + 1) + '</td><td>' + p.name + '</td><td>' + p.matchPoints + '</td><td>' + p.victoryPoints + '</td></tr>'
             ).join('');
         }
 
@@ -578,6 +683,7 @@
             document.getElementById('matches-section').classList.remove('hidden');
             updateRoundIndicator();
             generateMatches();
+            updateAddPlayerButton();
             saveState();
         }
 
@@ -595,7 +701,7 @@
 
         function generateMatches() {
             const sorted = [...players].sort((a, b) => {
-                if (b.matchesWon !== a.matchesWon) return b.matchesWon - a.matchesWon;
+                if (b.matchPoints !== a.matchPoints) return b.matchPoints - a.matchPoints;
                 return b.victoryPoints - a.victoryPoints;
             });
             matches = [];
@@ -648,7 +754,7 @@
             container.innerHTML = matches.map((match, index) => 
                 '<div class="match" id="match-' + index + '">' +
                 '<div class="match-player">' +
-                    '<div class="name">' + match.player1 + '</div>' +
+                    '<div class="name" draggable="true" ondragstart="dragStart(event, ' + index + ', 1)" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event, ' + index + ', 1)">' + match.player1 + '</div>' +
                     '<div class="vp-label">Victory Points</div>' +
                     '<input type="number" id="vp1-' + index + '" value="' + match.vp1 + '" min="0" onchange="updateMatchVP(' + index + ')" placeholder="VP">' +
                     '<button onclick="setWinner(' + index + ', 1)" class="win-btn ' + (match.winner === 1 ? 'selected' : '') + '">Winner</button>' +
@@ -658,7 +764,7 @@
                     '<button onclick="setWinner(' + index + ', 0)" class="tie-btn ' + (match.winner === 0 ? 'selected' : '') + '">Tie</button>' +
                 '</div>' +
                 '<div class="match-player">' +
-                    '<div class="name">' + match.player2 + '</div>' +
+                    '<div class="name" draggable="true" ondragstart="dragStart(event, ' + index + ', 2)" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event, ' + index + ', 2)">' + match.player2 + '</div>' +
                     '<div class="vp-label">Victory Points</div>' +
                     '<input type="number" id="vp2-' + index + '" value="' + match.vp2 + '" min="0" onchange="updateMatchVP(' + index + ')" placeholder="VP">' +
                     '<button onclick="setWinner(' + index + ', 2)" class="win-btn ' + (match.winner === 2 ? 'selected' : '') + '">Winner</button>' +
@@ -679,6 +785,90 @@
             matches[index].winner = winner;
             renderMatches();
             saveState();
+        }
+
+        // Drag and drop functions
+        let dragData = null;
+
+        function dragStart(event, matchIndex, playerPosition) {
+            dragData = { matchIndex, playerPosition };
+            event.target.classList.add('dragging');
+        }
+
+        function dragOver(event) {
+            event.preventDefault();
+            event.target.classList.add('drag-over');
+        }
+
+        function dragLeave(event) {
+            event.target.classList.remove('drag-over');
+        }
+
+        function drop(event, targetMatchIndex, targetPosition) {
+            event.preventDefault();
+            event.target.classList.remove('drag-over');
+            
+            if (!dragData) return;
+
+            const sourceMatch = matches[dragData.matchIndex];
+            const targetMatch = matches[targetMatchIndex];
+
+            // Get source and target player names
+            const sourcePlayer = dragData.playerPosition === 1 ? sourceMatch.player1 : sourceMatch.player2;
+            const targetPlayer = targetPosition === 1 ? targetMatch.player1 : targetMatch.player2;
+
+            // Swap players
+            if (dragData.playerPosition === 1) {
+                sourceMatch.player1 = targetPlayer;
+            } else {
+                sourceMatch.player2 = targetPlayer;
+            }
+
+            if (targetPosition === 1) {
+                targetMatch.player1 = sourcePlayer;
+            } else {
+                targetMatch.player2 = sourcePlayer;
+            }
+
+            dragData = null;
+            renderMatches();
+            saveState();
+        }
+
+        // Late player functions
+        function showAddPlayerModal() {
+            document.getElementById('add-player-modal').classList.add('active');
+            document.getElementById('late-player-name').focus();
+        }
+
+        function hideAddPlayerModal() {
+            document.getElementById('add-player-modal').classList.remove('active');
+            document.getElementById('late-player-name').value = '';
+        }
+
+        function addLatePlayer() {
+            const input = document.getElementById('late-player-name');
+            const name = input.value.trim();
+            
+            if (name && !players.find(p => p.name.toLowerCase() === name.toLowerCase())) {
+                players.push({
+                    name: name,
+                    matchPoints: 0,
+                    victoryPoints: 0
+                });
+                matchHistory[name] = [];
+                updateStandings();
+                saveState();
+                hideAddPlayerModal();
+                alert(name + ' has been added to the tournament!');
+            } else if (players.find(p => p.name.toLowerCase() === name.toLowerCase())) {
+                alert('Player already exists!');
+            }
+        }
+
+        function updateAddPlayerButton() {
+            const btn = document.getElementById('add-late-player-btn');
+            btn.style.display = (currentRound > 0 && !tournamentFinished) ? 'block' : 'none';
         }
 
         function submitRoundResults() {
@@ -705,11 +895,14 @@
                 player2.victoryPoints += vp2;
 
                 if (match.winner === 1) {
-                    player1.matchesWon++;
+                    player1.matchPoints += 3;
                 } else if (match.winner === 2) {
-                    player2.matchesWon++;
+                    player2.matchPoints += 3;
+                } else {
+                    // Tie (winner === 0) - both get 1 point
+                    player1.matchPoints += 1;
+                    player2.matchPoints += 1;
                 }
-                // Tie (winner === 0) means no one gets a match win
 
                 matchHistory[match.player1].push(match.player2);
                 matchHistory[match.player2].push(match.player1);
@@ -738,22 +931,23 @@
             }
 
             const sorted = [...players].sort((a, b) => {
-                if (b.matchesWon !== a.matchesWon) return b.matchesWon - a.matchesWon;
+                if (b.matchPoints !== a.matchPoints) return b.matchPoints - a.matchPoints;
                 return b.victoryPoints - a.victoryPoints;
             });
 
             if (sorted[0]) {
                 document.getElementById('first-place').textContent = sorted[0].name;
-                document.getElementById('first-points').textContent = sorted[0].matchesWon + ' wins, ' + sorted[0].victoryPoints + ' VP';
+                document.getElementById('first-points').textContent = sorted[0].matchPoints + ' MP, ' + sorted[0].victoryPoints + ' VP';
             }
             if (sorted[1]) {
                 document.getElementById('second-place').textContent = sorted[1].name;
-                document.getElementById('second-points').textContent = sorted[1].matchesWon + ' wins, ' + sorted[1].victoryPoints + ' VP';
+                document.getElementById('second-points').textContent = sorted[1].matchPoints + ' MP, ' + sorted[1].victoryPoints + ' VP';
             }
             if (sorted[2]) {
                 document.getElementById('third-place').textContent = sorted[2].name;
-                document.getElementById('third-points').textContent = sorted[2].matchesWon + ' wins, ' + sorted[2].victoryPoints + ' VP';
+                document.getElementById('third-points').textContent = sorted[2].matchPoints + ' MP, ' + sorted[2].victoryPoints + ' VP';
             }
+            updateAddPlayerButton();
         }
 
         function resetTournament() {
@@ -774,6 +968,7 @@
             updatePlayerList();
             updateStandings();
             checkStartButton();
+            updateAddPlayerButton();
             localStorage.removeItem(STORAGE_KEY);
         }
 
