@@ -343,6 +343,18 @@
             border: 2px solid #27ae60;
         }
 
+        .match.bye-match {
+            background: rgba(155, 89, 182, 0.15);
+            border: 1px dashed rgba(155, 89, 182, 0.5);
+        }
+
+        .void-player {
+            color: rgba(255, 255, 255, 0.4);
+            font-style: italic;
+            background: rgba(255, 255, 255, 0.05) !important;
+            cursor: default !important;
+        }
+
         .warning {
             color: #ff6b6b;
             font-size: 0.9rem;
@@ -476,7 +488,7 @@
                 <button onclick="addPlayer()">Add Player</button>
             </div>
             <div class="player-list" id="player-list"></div>
-            <p class="info-text">Add at least 4 players to start the tournament (even number required)</p>
+            <p class="info-text">Add at least 2 players to start (odd numbers OK - unpaired player faces VOID)</p>
             <p class="info-text">Scoring: Win = 3 MP, Draw = 1 MP each</p>
             <div class="action-buttons">
                 <button onclick="startTournament()" id="start-btn" disabled>Start Tournament</button>
@@ -561,6 +573,12 @@
                 try {
                     const state = JSON.parse(saved);
                     players = state.players || [];
+                    // Migrate old data format (matchesWon -> matchPoints)
+                    players = players.map(p => ({
+                        name: p.name,
+                        matchPoints: p.matchPoints !== undefined ? p.matchPoints : (p.matchesWon || 0),
+                        victoryPoints: p.victoryPoints || 0
+                    }));
                     currentRound = state.currentRound || 0;
                     matches = state.matches || [];
                     matchHistory = state.matchHistory || {};
@@ -656,7 +674,7 @@
 
         function checkStartButton() {
             const btn = document.getElementById('start-btn');
-            btn.disabled = players.length < 4 || players.length % 2 !== 0;
+            btn.disabled = players.length < 2; // Now supports odd numbers with BYE
         }
 
         function updateStandings() {
@@ -668,12 +686,16 @@
             }
 
             const sorted = [...players].sort((a, b) => {
-                if (b.matchPoints !== a.matchPoints) return b.matchPoints - a.matchPoints;
-                return b.victoryPoints - a.victoryPoints;
+                const aMP = a.matchPoints || 0;
+                const bMP = b.matchPoints || 0;
+                const aVP = a.victoryPoints || 0;
+                const bVP = b.victoryPoints || 0;
+                if (bMP !== aMP) return bMP - aMP;
+                return bVP - aVP;
             });
             
             tbody.innerHTML = sorted.map((p, i) => 
-                '<tr><td>' + (i + 1) + '</td><td>' + p.name + '</td><td>' + p.matchPoints + '</td><td>' + p.victoryPoints + '</td></tr>'
+                '<tr><td>' + (i + 1) + '</td><td>' + p.name + '</td><td>' + (p.matchPoints || 0) + '</td><td>' + (p.victoryPoints || 0) + '</td></tr>'
             ).join('');
         }
 
@@ -740,6 +762,17 @@
                         winner: null,
                         completed: false
                     });
+                } else {
+                    // Odd player gets a BYE (vs VOID)
+                    matches.push({
+                        player1: unpaired[i].name,
+                        player2: 'VOID',
+                        vp1: 0,
+                        vp2: 0,
+                        winner: 1, // Auto-win for the player
+                        isBye: true,
+                        completed: false
+                    });
                 }
             }
 
@@ -751,26 +784,46 @@
             const container = document.getElementById('matches-container');
             document.getElementById('current-round').textContent = currentRound;
 
-            container.innerHTML = matches.map((match, index) => 
-                '<div class="match" id="match-' + index + '">' +
-                '<div class="match-player">' +
-                    '<div class="name" draggable="true" ondragstart="dragStart(event, ' + index + ', 1)" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event, ' + index + ', 1)">' + match.player1 + '</div>' +
-                    '<div class="vp-label">Victory Points</div>' +
-                    '<input type="number" id="vp1-' + index + '" value="' + match.vp1 + '" min="0" onchange="updateMatchVP(' + index + ')" placeholder="VP">' +
-                    '<button onclick="setWinner(' + index + ', 1)" class="win-btn ' + (match.winner === 1 ? 'selected' : '') + '">Winner</button>' +
-                '</div>' +
-                '<div class="match-center">' +
-                    '<div class="vs">VS</div>' +
-                    '<button onclick="setWinner(' + index + ', 0)" class="tie-btn ' + (match.winner === 0 ? 'selected' : '') + '">Tie</button>' +
-                '</div>' +
-                '<div class="match-player">' +
-                    '<div class="name" draggable="true" ondragstart="dragStart(event, ' + index + ', 2)" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event, ' + index + ', 2)">' + match.player2 + '</div>' +
-                    '<div class="vp-label">Victory Points</div>' +
-                    '<input type="number" id="vp2-' + index + '" value="' + match.vp2 + '" min="0" onchange="updateMatchVP(' + index + ')" placeholder="VP">' +
-                    '<button onclick="setWinner(' + index + ', 2)" class="win-btn ' + (match.winner === 2 ? 'selected' : '') + '">Winner</button>' +
-                '</div>' +
-                '</div>'
-            ).join('');
+            container.innerHTML = matches.map((match, index) => {
+                const isBye = match.player2 === 'VOID';
+                let html = '<div class="match ' + (isBye ? 'bye-match' : '') + '" id="match-' + index + '">';
+                
+                // Player 1
+                html += '<div class="match-player">';
+                html += '<div class="name" draggable="true" ondragstart="dragStart(event, ' + index + ', 1)" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event, ' + index + ', 1)">' + match.player1 + '</div>';
+                html += '<div class="vp-label">Victory Points</div>';
+                html += '<input type="number" id="vp1-' + index + '" value="' + match.vp1 + '" min="0" onchange="updateMatchVP(' + index + ')" placeholder="VP">';
+                html += '<button onclick="setWinner(' + index + ', 1)" class="win-btn ' + (match.winner === 1 ? 'selected' : '') + '">Winner</button>';
+                html += '</div>';
+                
+                // Center
+                html += '<div class="match-center">';
+                html += '<div class="vs">VS</div>';
+                if (isBye) {
+                    html += '<span style="font-size:0.8rem;color:rgba(255,255,255,0.5)">Auto-Win</span>';
+                } else {
+                    html += '<button onclick="setWinner(' + index + ', 0)" class="tie-btn ' + (match.winner === 0 ? 'selected' : '') + '">Tie</button>';
+                }
+                html += '</div>';
+                
+                // Player 2
+                html += '<div class="match-player">';
+                if (isBye) {
+                    html += '<div class="name void-player">VOID</div>';
+                    html += '<div class="vp-label" style="opacity:0.3">No VP</div>';
+                    html += '<input type="number" disabled style="opacity:0.3" value="0">';
+                    html += '<button disabled class="win-btn" style="opacity:0.3">Winner</button>';
+                } else {
+                    html += '<div class="name" draggable="true" ondragstart="dragStart(event, ' + index + ', 2)" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event, ' + index + ', 2)">' + match.player2 + '</div>';
+                    html += '<div class="vp-label">Victory Points</div>';
+                    html += '<input type="number" id="vp2-' + index + '" value="' + match.vp2 + '" min="0" onchange="updateMatchVP(' + index + ')" placeholder="VP">';
+                    html += '<button onclick="setWinner(' + index + ', 2)" class="win-btn ' + (match.winner === 2 ? 'selected' : '') + '">Winner</button>';
+                }
+                html += '</div>';
+                
+                html += '</div>';
+                return html;
+            }).join('');
         }
 
         function updateMatchVP(index) {
@@ -817,6 +870,12 @@
             const sourcePlayer = dragData.playerPosition === 1 ? sourceMatch.player1 : sourceMatch.player2;
             const targetPlayer = targetPosition === 1 ? targetMatch.player1 : targetMatch.player2;
 
+            // Don't allow swapping with or as VOID
+            if (sourcePlayer === 'VOID' || targetPlayer === 'VOID') {
+                dragData = null;
+                return;
+            }
+
             // Swap players
             if (dragData.playerPosition === 1) {
                 sourceMatch.player1 = targetPlayer;
@@ -857,10 +916,26 @@
                     victoryPoints: 0
                 });
                 matchHistory[name] = [];
+                
+                // Check if there's a BYE match to replace
+                const byeMatchIndex = matches.findIndex(m => m.player2 === 'VOID' && m.isBye);
+                if (byeMatchIndex !== -1) {
+                    // Replace VOID with the new player
+                    matches[byeMatchIndex].player2 = name;
+                    matches[byeMatchIndex].winner = null;
+                    matches[byeMatchIndex].isBye = false;
+                    renderMatches();
+                }
+                
                 updateStandings();
                 saveState();
                 hideAddPlayerModal();
-                alert(name + ' has been added to the tournament!');
+                
+                if (byeMatchIndex !== -1) {
+                    alert(name + ' has been added and paired with ' + matches[byeMatchIndex].player1 + '!');
+                } else {
+                    alert(name + ' has been added to the tournament! They will be paired in the next round.');
+                }
             } else if (players.find(p => p.name.toLowerCase() === name.toLowerCase())) {
                 alert('Player already exists!');
             }
@@ -885,27 +960,37 @@
             }
 
             matches.forEach((match, index) => {
-                const vp1 = parseInt(document.getElementById('vp1-' + index).value) || 0;
-                const vp2 = parseInt(document.getElementById('vp2-' + index).value) || 0;
-
+                const isBye = match.player2 === 'VOID';
+                const vp1Input = document.getElementById('vp1-' + index);
+                const vp1 = vp1Input ? (parseInt(vp1Input.value) || 0) : 0;
+                
                 const player1 = players.find(p => p.name === match.player1);
-                const player2 = players.find(p => p.name === match.player2);
 
                 player1.victoryPoints += vp1;
-                player2.victoryPoints += vp2;
 
-                if (match.winner === 1) {
+                if (isBye) {
+                    // BYE match - player gets 3 points automatically
                     player1.matchPoints += 3;
-                } else if (match.winner === 2) {
-                    player2.matchPoints += 3;
                 } else {
-                    // Tie (winner === 0) - both get 1 point
-                    player1.matchPoints += 1;
-                    player2.matchPoints += 1;
-                }
+                    const vp2Input = document.getElementById('vp2-' + index);
+                    const vp2 = vp2Input ? (parseInt(vp2Input.value) || 0) : 0;
+                    const player2 = players.find(p => p.name === match.player2);
 
-                matchHistory[match.player1].push(match.player2);
-                matchHistory[match.player2].push(match.player1);
+                    player2.victoryPoints += vp2;
+
+                    if (match.winner === 1) {
+                        player1.matchPoints += 3;
+                    } else if (match.winner === 2) {
+                        player2.matchPoints += 3;
+                    } else {
+                        // Tie (winner === 0) - both get 1 point
+                        player1.matchPoints += 1;
+                        player2.matchPoints += 1;
+                    }
+
+                    matchHistory[match.player1].push(match.player2);
+                    matchHistory[match.player2].push(match.player1);
+                }
             });
 
             updateStandings();
